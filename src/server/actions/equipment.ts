@@ -17,7 +17,7 @@ const equipmentFields = {
   name: z.string().min(1, "El nombre es obligatorio"),
   code: z.string().min(1, "El código interno es obligatorio"),
   category: z.string().min(1, "La categoría es obligatoria"),
-  carId: z.string().cuid("Selecciona un carro válido"),
+  carId: z.string().min(1, "Selecciona un carro válido"),
   description: z.string().optional(),
   notes: z.string().optional(),
   position: positionSchema,
