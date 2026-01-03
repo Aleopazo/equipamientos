@@ -1,13 +1,13 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
 
-interface Params {
+type RouteParams = Promise<{
   fileId: string;
-}
+}>;
 
-export async function GET(_: Request, context: { params: Params }) {
-  const { fileId } = context.params;
+export async function GET(_: NextRequest, { params }: { params: RouteParams }) {
+  const { fileId } = await params;
 
   const file = await prisma.equipmentFile.findUnique({
     where: { id: fileId },
