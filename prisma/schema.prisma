@@ -1,0 +1,123 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Equipment {
+  id             String            @id @default(cuid())
+  name           String
+  code           String            @unique
+  description    String?
+  category       String
+  position       Json?
+  currentStateId String?
+  currentState   EquipmentState?   @relation("EquipmentCurrentState", fields: [currentStateId], references: [id])
+  primaryPhotoId String?           @unique
+  primaryPhoto   EquipmentFile?    @relation("EquipmentPrimaryPhoto", fields: [primaryPhotoId], references: [id])
+  notes          String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  files          EquipmentFile[]
+  tickets        Ticket[]
+  logs           EquipmentLog[]
+
+  @@index([category])
+}
+
+model EquipmentState {
+  id          String        @id @default(cuid())
+  name        String
+  description String?
+  level       Int           @default(0)
+  color       String        @default("#9CA3AF") // hex code for UI semáforo
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  equipmentCurrent Equipment[] @relation("EquipmentCurrentState")
+  logs             EquipmentLog[]
+}
+
+model EquipmentFile {
+  id           String     @id @default(cuid())
+  equipmentId  String
+  equipment    Equipment  @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+  label        String
+  fileName     String
+  mimeType     String
+  size         Int
+  storedPath   String
+  uploadedAt   DateTime   @default(now())
+  uploadedBy   String?
+  description  String?
+  isPrimary    Boolean    @default(false)
+  primaryFor   Equipment? @relation("EquipmentPrimaryPhoto")
+
+  @@index([equipmentId])
+  @@index([storedPath])
+}
+
+model Ticket {
+  id             String     @id @default(cuid())
+  equipmentId    String
+  equipment      Equipment  @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+  title          String
+  description    String
+  status         TicketStatus @default(CREADO)
+  priority       TicketPriority @default(MEDIUM)
+  openedAt       DateTime   @default(now())
+  closedAt       DateTime?
+  reporter       String?
+  assignee       String?
+  tags           String[]
+  lastUpdateAt   DateTime   @updatedAt
+  comments       TicketComment[]
+
+  @@index([equipmentId])
+  @@index([status])
+}
+
+model TicketComment {
+  id        String   @id @default(cuid())
+  ticketId  String
+  ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author    String?
+  message   String
+  createdAt DateTime @default(now())
+
+  @@index([ticketId])
+}
+
+model EquipmentLog {
+  id             String          @id @default(cuid())
+  equipmentId    String
+  equipment      Equipment       @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+  stateId        String?
+  state          EquipmentState? @relation(fields: [stateId], references: [id])
+  message        String
+  metadata       Json?
+  recordedAt     DateTime        @default(now())
+  recordedBy     String?
+
+  @@index([equipmentId])
+  @@index([stateId])
+  @@index([recordedAt])
+}
+
+enum TicketStatus {
+  CREADO
+  EN_PROCESO
+  FINALIZADO
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
