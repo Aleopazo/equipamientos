@@ -1,5 +1,6 @@
 "use server";
 
+import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
@@ -34,7 +35,7 @@ export async function createEquipment(input: z.infer<typeof createEquipmentSchem
   const equipment = await prisma.equipment.create({
     data: {
       ...payload,
-      position: position ?? null,
+      position: position ?? undefined,
     },
   });
 
@@ -186,7 +187,7 @@ const assignStateSchema = z.object({
   stateId: z.string().cuid(),
   message: z.string().optional(),
   recordedBy: z.string().optional(),
-  metadata: z.record(z.any()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 export async function assignEquipmentState(input: z.infer<typeof assignStateSchema>) {
@@ -212,7 +213,9 @@ export async function assignEquipmentState(input: z.infer<typeof assignStateSche
         equipmentId: data.equipmentId,
         stateId: data.stateId,
         message: data.message ?? `Estado actualizado a ${state.name}`,
-        metadata: data.metadata,
+        metadata: data.metadata
+          ? (JSON.parse(JSON.stringify(data.metadata)) as Prisma.InputJsonValue)
+          : undefined,
         recordedBy: data.recordedBy,
       },
     });

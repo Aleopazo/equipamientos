@@ -3,7 +3,7 @@
 import { useState, useTransition, FormEvent } from "react";
 import Link from "next/link";
 
-import { type Prisma } from "@prisma/client";
+import { type Prisma, TicketStatus } from "@prisma/client";
 
 import { cn } from "@/lib/utils";
 import { createEquipment } from "@/server/actions/equipment";
@@ -11,14 +11,7 @@ import { createEquipment } from "@/server/actions/equipment";
 type EquipmentSummary = Prisma.EquipmentGetPayload<{
   include: {
     currentState: true;
-    tickets: {
-      where: {
-        NOT: { status: "CLOSED" };
-      };
-      orderBy: {
-        openedAt: "desc";
-      };
-    };
+    tickets: true;
   };
 }>;
 
@@ -141,7 +134,9 @@ export function EquipmentListPanel({ equipment, activeId }: EquipmentListPanelPr
               const isActive = item.id === activeId;
               const activeState = item.currentState;
               const color = activeState?.color ?? "#9CA3AF";
-              const openTickets = item.tickets.length;
+              const openTickets = item.tickets.filter(
+                (ticket) => ticket.status !== TicketStatus.FINALIZADO,
+              ).length;
 
               return (
                 <li key={item.id} className="relative">

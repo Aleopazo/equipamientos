@@ -1,4 +1,4 @@
-import { type Prisma, TicketPriority, TicketStatus } from "@prisma/client";
+import { type Prisma, type EquipmentState, TicketPriority, TicketStatus } from "@prisma/client";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -9,7 +9,7 @@ import {
   updateEquipment,
 } from "@/server/actions/equipment";
 import { removeEquipmentFile, uploadEquipmentFile } from "@/server/actions/files";
-import { createTicket, deleteTicket, updateTicket } from "@/server/actions/tickets";
+import { addTicketComment, createTicket, deleteTicket, updateTicket } from "@/server/actions/tickets";
 import { cn } from "@/lib/utils";
 
 type EquipmentDetailData = Prisma.EquipmentGetPayload<{
@@ -17,7 +17,11 @@ type EquipmentDetailData = Prisma.EquipmentGetPayload<{
     currentState: true;
     primaryPhoto: true;
     files: true;
-    tickets: true;
+    tickets: {
+      include: {
+        comments: true;
+      };
+    };
     logs: {
       include: {
         state: true;
@@ -28,7 +32,7 @@ type EquipmentDetailData = Prisma.EquipmentGetPayload<{
 
 interface EquipmentDetailProps {
   equipment: EquipmentDetailData;
-  states: Prisma.EquipmentState[];
+  states: EquipmentState[];
 }
 
 function formatBytes(bytes: number) {
