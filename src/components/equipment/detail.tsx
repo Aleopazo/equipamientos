@@ -1,4 +1,10 @@
-import { type Prisma, type EquipmentState, TicketPriority, TicketStatus } from "@prisma/client";
+import {
+  type Prisma,
+  type EquipmentState,
+  type Car,
+  TicketPriority,
+  TicketStatus,
+} from "@prisma/client";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -15,6 +21,7 @@ import { cn } from "@/lib/utils";
 type EquipmentDetailData = Prisma.EquipmentGetPayload<{
   include: {
     currentState: true;
+    car: true;
     primaryPhoto: true;
     files: true;
     tickets: {
@@ -33,6 +40,7 @@ type EquipmentDetailData = Prisma.EquipmentGetPayload<{
 interface EquipmentDetailProps {
   equipment: EquipmentDetailData;
   states: EquipmentState[];
+  cars: Car[];
 }
 
 function formatBytes(bytes: number) {
@@ -53,7 +61,7 @@ function formatDate(date: Date | null | undefined) {
   }).format(date);
 }
 
-export async function EquipmentDetail({ equipment, states }: EquipmentDetailProps) {
+export async function EquipmentDetail({ equipment, states, cars }: EquipmentDetailProps) {
   const activeState = equipment.currentState;
 
   async function handleEquipmentUpdate(formData: FormData) {
@@ -63,10 +71,11 @@ export async function EquipmentDetail({ equipment, states }: EquipmentDetailProp
     const name = formData.get("name");
     const code = formData.get("code");
     const category = formData.get("category");
-    const description = formData.get("description");
+        const description = formData.get("description");
     const notes = formData.get("notes");
     const positionX = formData.get("positionX");
     const positionY = formData.get("positionY");
+        const carId = formData.get("carId");
     const photo = formData.get("photo");
 
     if (typeof equipmentId !== "string") {
@@ -81,6 +90,9 @@ export async function EquipmentDetail({ equipment, states }: EquipmentDetailProp
     if (typeof category !== "string" || category.trim().length === 0) {
       throw new Error("La categoría es obligatoria.");
     }
+        if (typeof carId !== "string" || carId.trim().length === 0) {
+          throw new Error("Debes seleccionar un carro.");
+        }
 
     const parsedX =
       typeof positionX === "string" && positionX.trim().length > 0
@@ -99,6 +111,7 @@ export async function EquipmentDetail({ equipment, states }: EquipmentDetailProp
       name: name.trim(),
       code: code.trim(),
       category: category.trim(),
+          carId: carId.trim(),
       description:
         typeof description === "string" && description.trim().length > 0
           ? description.trim()
@@ -319,6 +332,21 @@ export async function EquipmentDetail({ equipment, states }: EquipmentDetailProp
                 defaultValue={equipment.category}
                 className="mt-1 w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 shadow-sm focus:border-neutral-500 focus:outline-none focus:ring-2 focus:ring-neutral-200 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:focus:border-neutral-500 dark:focus:ring-neutral-700"
               />
+            </label>
+            <label className="text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+              Carro asignado
+              <select
+                name="carId"
+                defaultValue={equipment.carId}
+                required
+                className="mt-1 w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 shadow-sm focus:border-neutral-500 focus:outline-none focus:ring-2 focus:ring-neutral-200 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:focus:border-neutral-500 dark:focus:ring-neutral-700"
+              >
+                {cars.map((car) => (
+                  <option key={car.id} value={car.id}>
+                    {car.name}
+                  </option>
+                ))}
+              </select>
             </label>
             <label className="text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
               Foto principal
@@ -833,6 +861,9 @@ export async function EquipmentDetail({ equipment, states }: EquipmentDetailProp
             </h1>
             <p className="text-sm font-mono text-neutral-500 dark:text-neutral-400">
               Código interno: {equipment.code}
+            </p>
+            <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
+              Asignado a: {equipment.car.name}
             </p>
           </div>
           <span

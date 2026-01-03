@@ -14,6 +14,8 @@ model Equipment {
   description    String?
   category       String
   position       Json?
+  carId          String
+  car            Car               @relation(fields: [carId], references: [id], onDelete: Cascade)
   currentStateId String?
   currentState   EquipmentState?   @relation("EquipmentCurrentState", fields: [currentStateId], references: [id])
   primaryPhotoId String?           @unique
@@ -26,6 +28,7 @@ model Equipment {
   tickets        Ticket[]
   logs           EquipmentLog[]
 
+  @@index([carId])
   @@index([category])
 }
 
@@ -106,6 +109,20 @@ model EquipmentLog {
   @@index([equipmentId])
   @@index([stateId])
   @@index([recordedAt])
+}
+
+model Car {
+  id          String      @id @default(cuid())
+  name        String
+  code        String      @unique
+  description String?
+  order       Int         @default(0)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  equipment   Equipment[]
+
+  @@index([order])
 }
 
 enum TicketStatus {

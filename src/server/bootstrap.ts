@@ -25,52 +25,91 @@ const defaultStates = [
   },
 ];
 
-const defaultEquipment = [
+const defaultCars = [
+  {
+    name: "Carro 1",
+    code: "CAR-01",
+    description: "Unidad principal de limpieza solar.",
+    order: 1,
+  },
+  {
+    name: "Carro 2",
+    code: "CAR-02",
+    description: "Unidad secundaria de soporte.",
+    order: 2,
+  },
+  {
+    name: "Carro 3",
+    code: "CAR-03",
+    description: "Unidad para turnos de mantenimiento.",
+    order: 3,
+  },
+  {
+    name: "Carro 4",
+    code: "CAR-04",
+    description: "Unidad asignada a clientes industriales.",
+    order: 4,
+  },
+  {
+    name: "Carro 5",
+    code: "CAR-05",
+    description: "Unidad para operaciones en altura.",
+    order: 5,
+  },
+  {
+    name: "Carro 6",
+    code: "CAR-06",
+    description: "Unidad de respaldo y contingencia.",
+    order: 6,
+  },
+];
+
+const equipmentTemplates = [
   {
     name: "Carro Principal",
-    code: "ECR-CRR-001",
+    baseCode: "ECR-CRR-001",
     category: "Transporte",
     description: "Carro principal para traslado de equipos en terreno.",
     position: { x: 10, y: 20 },
   },
   {
     name: "Generador",
-    code: "ECR-GEN-001",
+    baseCode: "ECR-GEN-001",
     category: "Energía",
     description: "Generador eléctrico para suministro autónomo.",
     position: { x: 30, y: 20 },
   },
   {
     name: "Bomba Llenado Estanque",
-    code: "ECR-BLE-001",
+    baseCode: "ECR-BLE-001",
     category: "Hidráulica",
     description: "Bomba de llenado para estanques de agua.",
     position: { x: 50, y: 20 },
   },
   {
     name: "Bomba Presión Mangueras",
-    code: "ECR-BPM-001",
+    baseCode: "ECR-BPM-001",
     category: "Hidráulica",
     description: "Bomba de alta presión para alimentación de mangueras.",
     position: { x: 70, y: 20 },
   },
   {
     name: "SteadyPress",
-    code: "ECR-STD-001",
+    baseCode: "ECR-STD-001",
     category: "Soporte",
     description: "Equipo SteadyPress para estabilización de flujo.",
     position: { x: 90, y: 20 },
   },
   {
     name: "Robot de Limpieza",
-    code: "ECR-ROB-001",
+    baseCode: "ECR-ROB-001",
     category: "Automatización",
     description: "Robot para limpieza automatizada de paneles.",
     position: { x: 110, y: 20 },
   },
   {
     name: "Sistema Hidráulico Auxiliar",
-    code: "ECR-HID-001",
+    baseCode: "ECR-HID-001",
     category: "Hidráulica",
     description: "Sistema de soporte para componentes hidráulicos.",
     position: { x: 130, y: 20 },
@@ -93,14 +132,42 @@ export const ensureSeedData = cache(async () => {
     throw new Error("No se pudo determinar un estado por defecto para los equipos.");
   }
 
-  for (const equipment of defaultEquipment) {
-    const exists = await prisma.equipment.findFirst({
-      where: { code: equipment.code },
-    });
-    if (!exists) {
-      await prisma.equipment.create({
-        data: {
-          ...equipment,
+  const cars = await Promise.all(
+    defaultCars.map((car) =>
+      prisma.car.upsert({
+        where: { code: car.code },
+        create: car,
+        update: {
+          name: car.name,
+          order: car.order,
+          description: car.description,
+        },
+      }),
+    ),
+  );
+
+  for (const car of cars) {
+    const orderSuffix = car.order.toString().padStart(2, "0");
+
+    for (const template of equipmentTemplates) {
+      const code = `${template.baseCode}-C${orderSuffix}`;
+
+      await prisma.equipment.upsert({
+        where: { code },
+        update: {
+          carId: car.id,
+          name: template.name,
+          category: template.category,
+          description: template.description,
+          position: template.position,
+        },
+        create: {
+          name: template.name,
+          code,
+          category: template.category,
+          description: template.description,
+          position: template.position,
+          carId: car.id,
           currentStateId: defaultStateId,
         },
       });

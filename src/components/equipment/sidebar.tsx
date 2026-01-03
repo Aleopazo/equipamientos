@@ -11,13 +11,23 @@ import { createEquipment } from "@/server/actions/equipment";
 type EquipmentSummary = Prisma.EquipmentGetPayload<{
   include: {
     currentState: true;
+    car: true;
     tickets: true;
   };
 }>;
 
+interface CarOption {
+  id: string;
+  name: string;
+  code: string;
+}
+
 interface EquipmentListPanelProps {
   equipment: EquipmentSummary[];
   activeId?: string;
+  mode: "car" | "summary";
+  cars: CarOption[];
+  activeCarId?: string;
 }
 
 function getCategories(equipment: EquipmentSummary[]) {
@@ -25,11 +35,18 @@ function getCategories(equipment: EquipmentSummary[]) {
   return unique.sort((a, b) => a.localeCompare(b));
 }
 
-export function EquipmentListPanel({ equipment, activeId }: EquipmentListPanelProps) {
+export function EquipmentListPanel({
+  equipment,
+  activeId,
+  mode,
+  cars,
+  activeCarId,
+}: EquipmentListPanelProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const categories = getCategories(equipment);
+  const defaultCarId = activeCarId ?? cars[0]?.id ?? null;
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -39,13 +56,20 @@ export function EquipmentListPanel({ equipment, activeId }: EquipmentListPanelPr
     const name = formData.get("name");
     const code = formData.get("code");
     const category = formData.get("category");
+    const carId = formData.get("carId");
     const description = formData.get("description");
     const notes = formData.get("notes");
     const positionX = formData.get("positionX");
     const positionY = formData.get("positionY");
     const photo = formData.get("photo");
 
-    if (typeof name !== "string" || typeof code !== "string" || typeof category !== "string") {
+    if (
+      typeof name !== "string" ||
+      typeof code !== "string" ||
+      typeof category !== "string" ||
+      typeof carId !== "string" ||
+      carId.trim().length === 0
+    ) {
       setErrorMessage("Completa los campos obligatorios.");
       return;
     }
@@ -69,6 +93,7 @@ export function EquipmentListPanel({ equipment, activeId }: EquipmentListPanelPr
           name: name.trim(),
           code: code.trim(),
           category: category.trim(),
+          carId: carId.trim(),
           description:
             typeof description === "string" && description.trim().length > 0
               ? description.trim()
@@ -102,11 +127,13 @@ export function EquipmentListPanel({ equipment, activeId }: EquipmentListPanelPr
     <aside className="relative flex h-full flex-col overflow-hidden rounded-3xl border border-neutral-200 bg-white/75 shadow-sm backdrop-blur dark:border-neutral-800 dark:bg-neutral-900/70">
       <header className="border-b border-neutral-100/60 px-6 py-5 dark:border-neutral-800/60">
         <h2 className="text-lg font-semibold text-neutral-900 dark:text-neutral-50">
-          Equipamiento en terreno
+          {mode === "summary" ? "Resumen de incidencias" : "Equipamiento en terreno"}
         </h2>
         <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-neutral-500 dark:text-neutral-400">
-            Crea nuevos equipos o selecciona uno existente para revisar el detalle.
+            {mode === "summary"
+              ? "Equipos con estado en revisión/crítico o tickets operativos sin cerrar."
+              : "Crea nuevos equipos o selecciona uno existente para revisar el detalle."}
           </p>
           <button
             type="button"
@@ -125,10 +152,19 @@ export function EquipmentListPanel({ equipment, activeId }: EquipmentListPanelPr
             errorMessage={errorMessage}
             onClose={closeModal}
             onSubmit={handleSubmit}
+            cars={cars}
+            defaultCarId={defaultCarId}
           />
         ) : null}
         <div className="relative ps-6">
           <span className="absolute left-[10px] top-0 h-full w-px bg-gradient-to-b from-transparent via-neutral-300 to-transparent dark:via-neutral-700" />
+          {equipment.length === 0 ? (
+            <div className="mt-6 rounded-2xl border border-neutral-200 bg-white/80 p-6 text-sm text-neutral-500 dark:border-neutral-700 dark:bg-neutral-900/70 dark:text-neutral-400">
+              {mode === "summary"
+                ? "No hay equipos con incidencias ni tickets abiertos."
+                : "Aún no hay equipamiento registrado para este carro."}
+            </div>
+          ) : null}
           <ul className="mt-6 space-y-4">
             {equipment.map((item) => {
               const isActive = item.id === activeId;
@@ -148,7 +184,7 @@ export function EquipmentListPanel({ equipment, activeId }: EquipmentListPanelPr
                     <span className="inline-block h-2 w-2 rounded-full border border-white/80" />
                   </span>
                   <Link
-                    href={`/?equipment=${item.id}`}
+                    href={`/?car=${item.carId}&equipment=${item.id}`}
                     scroll={false}
                     className={cn(
                       "block rounded-2xl border border-transparent p-4 transition-colors",
@@ -165,6 +201,11 @@ export function EquipmentListPanel({ equipment, activeId }: EquipmentListPanelPr
                         <p className="text-xs font-mono text-neutral-500 dark:text-neutral-400">
                           {item.code}
                         </p>
+                        {mode === "summary" ? (
+                          <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
+                            {item.car.name}
+                          </p>
+                        ) : null}
                       </div>
                       <span
                         className="inline-flex items-center rounded-full bg-neutral-200/70 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-neutral-700 dark:bg-neutral-700/70 dark:text-neutral-200"
@@ -207,6 +248,8 @@ interface CreateEquipmentModalProps {
   errorMessage: string | null;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onClose: () => void;
+  cars: CarOption[];
+  defaultCarId: string | null;
 }
 
 function CreateEquipmentModal({
@@ -215,6 +258,8 @@ function CreateEquipmentModal({
   errorMessage,
   onSubmit,
   onClose,
+  cars,
+  defaultCarId,
 }: CreateEquipmentModalProps) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/40 px-4 py-10 backdrop-blur-sm">
@@ -276,6 +321,24 @@ function CreateEquipmentModal({
                 ))}
               </datalist>
             ) : null}
+          </label>
+          <label className="text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+            Carro asignado
+            <select
+              name="carId"
+              defaultValue={defaultCarId ?? ""}
+              required
+              className="mt-1 w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 shadow-sm focus:border-neutral-500 focus:outline-none focus:ring-2 focus:ring-neutral-200 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:focus:border-neutral-500 dark:focus:ring-neutral-700"
+            >
+              <option value="" disabled>
+                Selecciona un carro
+              </option>
+              {cars.map((car) => (
+                <option key={car.id} value={car.id}>
+                  {car.name}
+                </option>
+              ))}
+            </select>
           </label>
           <label className="text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
             Foto del equipamiento
