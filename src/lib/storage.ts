@@ -277,9 +277,19 @@ export async function getSignedObjectStorageUrl(
     Key: key,
   });
 
-  return getSignedUrl(getS3Client(), command, {
-    expiresIn: options.expiresInSeconds ?? 120,
-  });
+  try {
+    return await getSignedUrl(getS3Client(), command, {
+      expiresIn: options.expiresInSeconds ?? 120,
+    });
+  } catch (error) {
+    console.error("[storage] No fue posible generar la URL firmada", {
+      storedPath,
+      bucket: config.bucket,
+      endpoint: config.endpoint,
+      error,
+    });
+    throw error;
+  }
 }
 
 function extractObjectKey(storedPath: string, bucket: string): string | null {
