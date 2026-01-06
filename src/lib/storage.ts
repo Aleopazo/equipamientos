@@ -1,12 +1,14 @@
 import { mkdir, writeFile, stat, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
+import { Readable } from "node:stream";
 
 import {
   DeleteObjectCommand,
   GetObjectCommand,
   PutObjectCommand,
   S3Client,
+  type GetObjectCommandOutput,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { StorageDriver } from "@prisma/client";
@@ -290,6 +292,64 @@ export async function getSignedObjectStorageUrl(
     });
     throw error;
   }
+}
+
+function toWebReadableStream(body: GetObjectCommandOutput["Body"]): ReadableStream<Uint8Array> {
+  if (!body) {
+    throw new Error("El objeto obtenido del bucket no contiene datos.");
+  }
+
+  if (typeof (body as { transformToWebStream?: () => ReadableStream<Uint8Array> }).transformToWebStream === "function") {
+    return (body as { transformToWebStream: () => ReadableStream<Uint8Array> }).transformToWebStream();
+  }
+
+  if (body instanceof Readable) {
+    return Readable.toWeb(body);
+  }
+
+  if (body instanceof Uint8Array) {
+    return new ReadableStream({
+      start(controller) {
+        controller.enqueue(body);
+        controller.close();
+      },
+    });
+  }
+
+  if (typeof body === "string") {
+    const buffer = Buffer.from(body);
+    return new ReadableStream({
+      start(controller) {
+        controller.enqueue(buffer);
+        controller.close();
+      },
+    });
+  }
+
+  throw new Error("No se pudo convertir el objeto del bucket a un stream legible.");
+}
+
+export async function getObjectFromStorage(storedPath: string) {
+  const config = ensureObjectStorageConfig();
+  const key = extractObjectKey(storedPath, config.bucket);
+  if (!key) {
+    throw new Error("No se pudo resolver la clave del objeto almacenado en el bucket.");
+  }
+
+  const response = await getS3Client().send(
+    new GetObjectCommand({
+      Bucket: config.bucket,
+      Key: key,
+    }),
+  );
+
+  return {
+    body: toWebReadableStream(response.Body),
+    contentType: response.ContentType ?? undefined,
+    contentLength: response.ContentLength ?? undefined,
+    etag: response.ETag ?? undefined,
+    lastModified: response.LastModified ?? undefined,
+  };
 }
 
 function extractObjectKey(storedPath: string, bucket: string): string | null {

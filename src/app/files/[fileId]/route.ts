@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { StorageDriver } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
-import { getSignedObjectStorageUrl } from "@/lib/storage";
+import { getObjectFromStorage, getSignedObjectStorageUrl } from "@/lib/storage";
 
 type RouteParams = Promise<{
   fileId: string;
@@ -43,11 +43,49 @@ export async function GET(_: NextRequest, { params }: { params: RouteParams }) {
 
   if (file.storageType === StorageDriver.OBJECT_STORAGE) {
     try {
-      const signedUrl = await getSignedObjectStorageUrl(file.storedPath);
-      return NextResponse.redirect(signedUrl);
+      const object = await getObjectFromStorage(file.storedPath);
+      const headers = new Headers({
+        "Content-Type": object.contentType ?? file.mimeType ?? "application/octet-stream",
+        "Cache-Control": "private, max-age=60",
+        "Content-Disposition": `inline; filename="${file.fileName.replace(/"/g, '\\"')}"`,
+      });
+
+      if (object.contentLength != null) {
+        headers.set("Content-Length", object.contentLength.toString());
+      }
+      if (object.etag) {
+        headers.set("ETag", object.etag);
+      }
+      if (object.lastModified) {
+        headers.set("Last-Modified", object.lastModified.toUTCString());
+      }
+
+      return new NextResponse(object.body, {
+        status: 200,
+        headers,
+      });
     } catch (error) {
-      console.error("[files.get] Error generando URL firmada del bucket", error);
-      return NextResponse.redirect(file.storedPath);
+      console.error("[files.get] Error obteniendo archivo desde object storage", {
+        error,
+        fileId,
+      });
+
+      try {
+        const fallbackUrl = await getSignedObjectStorageUrl(file.storedPath, {
+          expiresInSeconds: 60,
+        });
+        return NextResponse.redirect(fallbackUrl);
+      } catch (secondaryError) {
+        console.error("[files.get] Fallback de URL firmada también falló", {
+          secondaryError,
+          fileId,
+        });
+      }
+
+      return NextResponse.json(
+        { message: "No fue posible recuperar el archivo solicitado" },
+        { status: 502 },
+      );
     }
   }
 
