@@ -3,11 +3,15 @@ import path from "node:path";
 
 import { describe, expect, it, beforeEach, afterAll } from "vitest";
 
+import { StorageDriver } from "@prisma/client";
+
 import { deleteFileFromStorage, saveFileToStorage } from "@/lib/storage";
 
 const TEST_EQUIPMENT_ID = "test-equipment";
 const BASE_PATH = process.env.FILE_STORAGE_PATH ?? "./storage/files";
 const TEST_DIR = path.join(BASE_PATH, TEST_EQUIPMENT_ID);
+
+process.env.FILE_STORAGE_DRIVER = "filesystem";
 
 async function cleanup() {
   await rm(TEST_DIR, { recursive: true, force: true });
@@ -31,9 +35,10 @@ describe("storage utilities", () => {
     expect(result.fileName).toBe("Informe_turno_AM");
     expect(result.mimeType).toBe("text/plain");
     expect(result.size).toBe(content.byteLength);
+    expect(result.storageType).toBe(StorageDriver.FILE_SYSTEM);
     expect(result.storedPath).toContain(TEST_EQUIPMENT_ID);
 
-    const fileInfo = await stat(result.storedPath);
+    const fileInfo = await stat(result.storedPath!);
     expect(fileInfo.isFile()).toBe(true);
     expect(fileInfo.size).toBe(content.byteLength);
   });
@@ -44,12 +49,15 @@ describe("storage utilities", () => {
     });
 
     const result = await saveFileToStorage(TEST_EQUIPMENT_ID, file);
-    const fileInfo = await stat(result.storedPath);
+    const fileInfo = await stat(result.storedPath!);
     expect(fileInfo.isFile()).toBe(true);
 
-    await deleteFileFromStorage(result.storedPath);
+    await deleteFileFromStorage({
+      storedPath: result.storedPath,
+      storageType: result.storageType,
+    });
 
-    await expect(stat(result.storedPath)).rejects.toMatchObject({
+    await expect(stat(result.storedPath!)).rejects.toMatchObject({
       code: "ENOENT",
     });
   });

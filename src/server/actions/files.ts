@@ -17,7 +17,7 @@ const uploadSchema = z.object({
 export async function uploadEquipmentFile(input: z.infer<typeof uploadSchema>) {
   const data = uploadSchema.parse(input);
 
-  const { storedPath, fileName, size, mimeType } = await saveFileToStorage(
+  const stored = await saveFileToStorage(
     data.equipmentId,
     data.file,
     data.label,
@@ -29,10 +29,12 @@ export async function uploadEquipmentFile(input: z.infer<typeof uploadSchema>) {
       label: data.label,
       description: data.description,
       uploadedBy: data.uploadedBy,
-      fileName,
-      size,
-      mimeType,
-      storedPath,
+      fileName: stored.fileName,
+      size: stored.size,
+      mimeType: stored.mimeType,
+      storedPath: stored.storedPath,
+      storageType: stored.storageType,
+      data: stored.data,
     },
   });
 
@@ -52,7 +54,10 @@ export async function removeEquipmentFile(input: z.infer<typeof deleteSchema>) {
   });
 
   queueMicrotask(async () => {
-    await deleteFileFromStorage(record.storedPath);
+    await deleteFileFromStorage({
+      storedPath: record.storedPath,
+      storageType: record.storageType,
+    });
   });
 
   revalidatePath("/");

@@ -5,7 +5,7 @@ Aplicación interna para visualizar y gestionar el equipamiento crítico que se 
 ### Arquitectura
 - **Frontend / Backend:** Next.js (App Router) con Server Actions y componentes cliente/servidor.
 - **Persistencia:** PostgreSQL gestionado vía Prisma ORM.
-- **Almacenamiento de archivos:** Sistema de ficheros local (`./storage/files`), configurable con `FILE_STORAGE_PATH`.
+- **Almacenamiento de archivos:** Driver dual. En local se usa el sistema de ficheros (`./storage/files`), mientras que en Railway (u otros entornos marcados con variables `RAILWAY_*`) se almacenan los binarios directamente en PostgreSQL. Puedes forzar el modo deseado con `FILE_STORAGE_DRIVER=filesystem|database` y ajustar la ruta con `FILE_STORAGE_PATH`.
 - **Estilos:** Tailwind CSS v4 con componentes propios.
 - **Testing:** Vitest para pruebas puntuales.
 
@@ -62,25 +62,27 @@ Se crean 6 carros (`CAR-01` … `CAR-06`) y para cada uno se replica el set base
 - `src/server/actions/*`: Server Actions para equipos, estados, archivos y tickets.
 - `src/server/queries/*`: consultas compuestas para la UI.
 - `src/lib/prisma.ts`: cliente Prisma singleton.
-- `src/lib/storage.ts`: utilidades de almacenamiento en disco.
-- `src/app/files/[fileId]/route.ts`: entrega los ficheros almacenados mediante redirección `file://`.
+- `src/lib/storage.ts`: utilidades de almacenamiento que abstraen entre disco local y base de datos.
+- `src/app/files/[fileId]/route.ts`: sirve los archivos ya sea redirigiendo a `file://` (filesystem) o transmitiendo el binario desde PostgreSQL.
 - `prisma/schema.prisma`: modelo de datos.
 - `prisma/migrations/20260103025713_car_fleet`: migración que introduce la tabla `Car` y el vínculo vehículo-equipo.
+- `prisma/migrations/20260103140000_storage_driver`: migración que habilita el driver dual de archivos.
 - `docker-compose.yml`: servicio PostgreSQL local.
 - `tests/*`: pruebas base (Vitest).
 
 ### Flujos clave
 - **Estados tipo semáforo:** formulario en el detalle del equipo que usa `assignEquipmentState` para actualizar el estado y registrar el historial.
-- **Archivos adjuntos:** los ficheros se guardan bajo `storage/files/<equipmentId>/`; pueden descargarse vía `GET /files/:fileId`.
+- **Archivos adjuntos:** en local se guardan bajo `storage/files/<equipmentId>/`, mientras que en Railway se persisten en la columna `data` de `EquipmentFile`. En ambos casos se consumen vía `GET /files/:fileId`, que detecta el origen y responde acorde.
 - **Tickets operativos:** creación, seguimiento y cierre desde la ficha del equipo, con cambios de estado y prioridad.
 - **Comentarios de tickets:** formulario inline que persiste mensajes con autor opcional y actualiza `lastUpdateAt`.
 - **Selección de carros:** el switch superior actualiza la URL (`?car=<id>`) y refresca el panel lateral. La opción “Resumen general” muestra todos los equipos con estado de alerta o tickets abiertos.
 
 ### Notas sobre almacenamiento de archivos
-- En entorno local los archivos se guardan dentro del repositorio (`storage/files`). Ajusta `FILE_STORAGE_PATH` en `.env` si quieres otro destino.
-- Verifica los permisos del directorio cuando despliegues en servidores Linux.
-- Para Railway u otros entornos efímeros, monta un volumen persistente o redirige `FILE_STORAGE_PATH` a un servicio externo (S3, GCS, etc.).
-- La ruta `GET /files/:fileId` devuelve una redirección `file://` para que `next/image` pueda optimizar imágenes locales; adapta este handler si migras a almacenamiento remoto.
+- En entorno local los archivos se guardan dentro del repositorio (`storage/files`) y el código evita versionarlos (`.gitignore`). Ajusta `FILE_STORAGE_PATH` en `.env` para cambiar la carpeta.
+- Para usar un bucket S3 compatible (por ejemplo Railway Object Storage) define `FILE_STORAGE_DRIVER=object_storage` y completa `FILE_STORAGE_ENDPOINT_URL`, `FILE_STORAGE_REGION`, `FILE_STORAGE_BUCKET_NAME`, `FILE_STORAGE_ACCESS_KEY_ID` y `FILE_STORAGE_SECRET_ACCESS_KEY`. La ruta pública del objeto queda guardada en `EquipmentFile.storedPath`.
+- Si la app detecta variables `RAILWAY_*` (o se define explícitamente `FILE_STORAGE_DRIVER=database`), los binarios se almacenan en la tabla `EquipmentFile.data`, manteniendo únicamente metadatos comunes (`fileName`, `mimeType`, etc.).
+- Para forzar siempre filesystem usa `FILE_STORAGE_DRIVER=filesystem`. Esto es útil si Railway monta un volumen persistente y prefieres no cargar la base.
+- El handler `GET /files/:fileId` gestiona los tres escenarios: redirige a `file://` en local, emite un enlace firmado del bucket o transmite el binario desde la base de datos.
 
 ### Pruebas
 ```bash
@@ -96,7 +98,7 @@ Esto detiene la base local utilizada durante el desarrollo.
 
 ### Despliegue sugerido (Railway u otros PaaS)
 1. Define `DATABASE_URL` apuntando al PostgreSQL gestionado por el proveedor.
-2. Configura `FILE_STORAGE_PATH` hacia un volumen persistente (`/data/files` por ejemplo) o hacia un bucket externo.
-3. Ejecuta `npm install`, `npm run db:generate` y `prisma migrate deploy` durante el build (incluye la migración `car_fleet` para los 6 carros).
+2. (Opcional) Si dispones de volumen persistente para ficheros, establece `FILE_STORAGE_DRIVER=filesystem` y `FILE_STORAGE_PATH=/data/files`. De lo contrario, deja que el driver automático persista en la base (`database`).
+3. Ejecuta `npm install`, `npm run db:generate` y `prisma migrate deploy` durante el build (incluye las migraciones `car_fleet` y `storage_driver`).
 4. Corre `npm run build` y expone el puerto 3000 con `npm run start`.
-5. Si usas almacenamiento remoto, modifica `/files/[fileId]` para entregar URLs firmadas en lugar de redirección `file://`.
+5. Si optas por un bucket externo (S3, GCS, etc.), adapta `src/lib/storage.ts` y el handler `/files/[fileId]` para generar URLs firmadas en lugar de transmitir el binario.

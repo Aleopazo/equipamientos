@@ -1,6 +1,6 @@
 "use server";
 
-import { Prisma } from "@prisma/client";
+import { Prisma, StorageDriver } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
@@ -89,7 +89,7 @@ export async function updateEquipment(input: z.infer<typeof updateEquipmentSchem
   }
 
   let newPrimaryPhotoId: string | undefined;
-  let oldPrimary: { id: string; storedPath: string } | null = null;
+  let oldPrimary: { id: string; storedPath: string | null; storageType: StorageDriver } | null = null;
 
   if (photo && photo.size > 0) {
     const { saveFileToStorage, deleteFileFromStorage } = await import("@/lib/storage");
@@ -111,7 +111,8 @@ export async function updateEquipment(input: z.infer<typeof updateEquipmentSchem
     if (existing.primaryPhotoId) {
       oldPrimary = {
         id: existing.primaryPhotoId,
-        storedPath: existing.primaryPhoto?.storedPath ?? "",
+        storedPath: existing.primaryPhoto?.storedPath ?? null,
+        storageType: existing.primaryPhoto?.storageType ?? StorageDriver.FILE_SYSTEM,
       };
     }
 
@@ -123,8 +124,11 @@ export async function updateEquipment(input: z.infer<typeof updateEquipmentSchem
     }
 
     queueMicrotask(async () => {
-      if (oldPrimary?.storedPath) {
-        await deleteFileFromStorage(oldPrimary.storedPath);
+      if (oldPrimary) {
+        await deleteFileFromStorage({
+          storedPath: oldPrimary.storedPath,
+          storageType: oldPrimary.storageType,
+        });
       }
       if (oldPrimary?.id) {
         await prisma.equipmentFile.delete({ where: { id: oldPrimary.id } }).catch(() => {});
@@ -175,7 +179,10 @@ export async function deleteEquipment(input: z.infer<typeof deleteEquipmentSchem
     for (const file of files) {
       queueMicrotask(async () => {
         const { deleteFileFromStorage } = await import("@/lib/storage");
-        await deleteFileFromStorage(file.storedPath);
+        await deleteFileFromStorage({
+          storedPath: file.storedPath,
+          storageType: file.storageType,
+        });
       });
     }
   });

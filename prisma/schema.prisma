@@ -53,7 +53,9 @@ model EquipmentFile {
   fileName     String
   mimeType     String
   size         Int
-  storedPath   String
+  storedPath   String?
+  storageType  StorageDriver @default(FILE_SYSTEM)
+  data         Bytes?
   uploadedAt   DateTime   @default(now())
   uploadedBy   String?
   description  String?
@@ -62,6 +64,7 @@ model EquipmentFile {
 
   @@index([equipmentId])
   @@index([storedPath])
+  @@index([storageType])
 }
 
 model Ticket {
@@ -136,5 +139,11 @@ enum TicketPriority {
   MEDIUM
   HIGH
   CRITICAL
+}
+
+enum StorageDriver {
+  FILE_SYSTEM
+  DATABASE
+  OBJECT_STORAGE
 }
 

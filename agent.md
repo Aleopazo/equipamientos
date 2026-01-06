@@ -13,7 +13,7 @@
 - `src/server/actions/*`: mutaciones encapsuladas (equipos, estados, archivos, tickets, comentarios).
 - `src/server/queries/equipment.ts`: consultas centralizadas para la UI.
 - `src/server/bootstrap.ts`: garantiza la creación de estados y equipos iniciales.
-- `src/lib/storage.ts`: utilidades de almacenamiento local de archivos.
+- `src/lib/storage.ts`: utilidades de almacenamiento con driver dual (filesystem local por defecto, PostgreSQL cuando `FILE_STORAGE_DRIVER=database` o se detecta Railway, y soporte de bucket S3 compatible con `FILE_STORAGE_DRIVER=object_storage`).
 - `prisma/schema.prisma`: modelo de datos alineado con Car, Equipment, EquipmentState, EquipmentFile, Ticket y EquipmentLog.
 
 ### Configuración rápida
@@ -26,7 +26,7 @@
 - El seed automático carga estados (“Operativo”, “Revisión”, “Crítico”), crea 6 carros (`CAR-01` … `CAR-06`) y replica el set base de equipamiento por carro (`-C0X`).
 - Cada equipo muestra un semáforo según su estado actual, tickets activos (excluye `FINALIZADO`) y código interno.
 - Formulario de estado registra el cambio y una entrada en `EquipmentLog`.
-- Formulario de archivos almacena los ficheros en `storage/files/<equipmentId>` y crea metadatos en BD.
+- Formulario de archivos guarda los binarios en `storage/files/<equipmentId>` durante el desarrollo local; en Railway (o con `FILE_STORAGE_DRIVER=database`) se persisten en `EquipmentFile.data` y solo se mantienen metadatos comunes.
 - Tickets se crean, cambian entre `CREADO`, `EN_PROCESO`, `FINALIZADO` y pueden recibir comentarios.
 - El estado y las acciones relevantes invalidan la caché vía `revalidatePath("/")`.
 - El switch superior actualiza `?car=` o `?view=summary` y redefine el dataset mostrado en el panel lateral.
@@ -46,6 +46,7 @@
 - Mantener Docker corriendo mientras se trabaja (`docker compose up -d`); la BD vive en el volumen `equip-control_postgres_data`.
 - Utilizar Server Actions existentes para nuevas operaciones; evita crear endpoints REST a menos que sea estrictamente necesario.
 - Si se agregan nuevos tipos de estados o equipos, actualizar `ensureSeedData` solo para defaults; los cambios en producción deberían hacerse mediante migraciones o acciones específicas.
-- Para Railway u otros PaaS, monta un volumen para `FILE_STORAGE_PATH` o reemplaza el handler de archivos por URLs remotas.
+- Para Railway u otros PaaS, por defecto se usa la columna `EquipmentFile.data` (driver `database`). Si prefieres disco, define `FILE_STORAGE_DRIVER=filesystem` y monta un volumen persistente; el handler `/files/[fileId]` ya diferencia todos los escenarios.
+- Para buckets externos, define `FILE_STORAGE_DRIVER=object_storage` y completa `FILE_STORAGE_ENDPOINT_URL`, `FILE_STORAGE_REGION`, `FILE_STORAGE_BUCKET_NAME`, `FILE_STORAGE_ACCESS_KEY_ID` y `FILE_STORAGE_SECRET_ACCESS_KEY`. Los archivos se suben via SDK S3 compatible y el endpoint `/files/[fileId]` entrega URLs firmadas temporales.
 - Si se introducen más carros, replica la lógica de seeds o expone un formulario administrativo; recuerda mantener la unicidad de códigos de equipo.
 
