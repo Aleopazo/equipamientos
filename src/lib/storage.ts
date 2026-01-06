@@ -304,7 +304,7 @@ function toWebReadableStream(body: GetObjectCommandOutput["Body"]): ReadableStre
   }
 
   if (body instanceof Readable) {
-    return Readable.toWeb(body);
+    return Readable.toWeb(body) as unknown as ReadableStream<Uint8Array>;
   }
 
   if (body instanceof Uint8Array) {
